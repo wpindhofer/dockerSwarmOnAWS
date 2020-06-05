@@ -1,0 +1,634 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: |
+
+  AWS CloudFormation Docker Swarm template
+
+  Template creates 5 instances on 2 AZs preconfigured as a Docker Swarm with
+  3 master and 2 worker nodes accessible over an ALB.
+
+  The cluster is ready to be used to deploy web facing services.
+
+  This template runs in eu-central-1.
+
+Parameters:
+
+  ProjectName:
+    Type: String
+    Default: myDockerSwarm
+    MaxLength: '50'
+    MinLength: '3'
+    Description: 'Please input your project name (which is used for tagging and labels):'
+
+  KeyPairName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: SSH-docker-swarm
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+  BucketName:
+    AllowedPattern: '^[0-9a-zA-Z]+([0-9a-zA-Z-]*[0-9a-zA-Z])*$'
+    ConstraintDescription: >-
+      Quick Start bucket name can include numbers, lowercase letters, uppercase
+      letters, and hyphens (-). It cannot start or end with a hyphen (-).
+    Default: 'waltersdockerswarm'
+    Description: >-
+      S3 bucket name for the Quick Start assets. Quick Start bucket name can
+      include numbers, lowercase letters, uppercase letters, and hyphens (-). It
+      cannot start or end with a hyphen (-).
+    Type: String
+
+  KeyPrefix:
+    AllowedPattern: '^[0-9a-zA-Z-/]*$'
+    ConstraintDescription: >-
+      Can include numbers, lowercase letters, uppercase letters, hyphens (-), and forward slash (/).
+    Default: 'swarm-join-tokens/'
+    Description: >-
+      S3 key prefix where assets are located should end withforward slash (/).
+    Type: String
+
+
+Resources:
+
+  RootRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Principal:
+              Service: ec2.amazonaws.com
+            Effect: Allow
+            Sid: ''
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:aws:s3:::${BucketName}/${KeyPrefix}*'
+                Effect: Allow
+          PolicyName: AuthenticatedS3GetObjects
+
+  RootInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: RootInstanceProfile
+      Path: /
+      Roles:
+      - !Ref RootRole
+
+  SwarmMasterTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn:
+            Fn::GetAtt:
+            - RootInstanceProfile
+            - Arn
+        DisableApiTermination: 'false'
+        InstanceInitiatedShutdownBehavior: stop
+        ImageId: ami-076431be05aaf8080
+        InstanceType: t2.micro
+        KeyName: !Ref KeyPairName
+        SecurityGroupIds:
+          - !GetAtt DSSGnodes.GroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            #Download script from S3 and run it
+            aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+            chmod +x /tmp/userdata-swarm-instances.sh
+            /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmMasterTemplate" "SwarmMasterAutoScaling"
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          buckets:
+            - !Sub ${BucketName}
+          roleName:
+            Ref: RootRole
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_bootstrap:
+            - get_master_cfg
+            - init_docker
+            - join_docker_as_master
+        get_master_cfg:
+          files:
+            /tmp/master-join-token.txt:
+              source: !Sub
+                - >-
+                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}master-join-token.txt
+                - BucketName: !Ref BucketName
+                  S3Region: !Sub 's3.${AWS::Region}'
+                  KeyPrefix: !Ref KeyPrefix
+              mode: '000755'
+              owner: root
+              group: root
+              command: cat /tmp/master-join-token.txt
+              authentication: S3AccessCreds
+            /tmp/swarmLeaderIp.txt:
+              source: !Sub
+                - >-
+                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}swarmLeaderIp.txt
+                - BucketName: !Ref BucketName
+                  S3Region: !Sub 's3.${AWS::Region}'
+                  KeyPrefix: !Ref KeyPrefix
+              mode: '000755'
+              owner: root
+              group: root
+              command: cat /tmp/swarmLeaderIp.txt
+              authentication: S3AccessCreds
+        init_docker:
+          commands:
+            'a_init_docker':
+              command: !Sub |
+                 /tmp/userdata-swarm-instances.sh initDocker
+        join_docker_as_master:
+          commands:
+            'a_join_docker_swarm_as_master':
+              command: !Sub |
+                docker swarm join --token $(cat /tmp/master-join-token.txt) $(cat /tmp/swarmLeaderIp.txt)
+
+
+  SwarmWorkerTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        IamInstanceProfile:
+          Arn:
+            Fn::GetAtt:
+            - RootInstanceProfile
+            - Arn
+        DisableApiTermination: 'false'
+        InstanceInitiatedShutdownBehavior: stop
+        ImageId: ami-076431be05aaf8080
+        InstanceType: t2.micro
+        KeyName: !Ref KeyPairName
+        SecurityGroupIds:
+          - !GetAtt DSSGnodes.GroupId
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            #Download script from S3 and run it
+            aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+            chmod +x /tmp/userdata-swarm-instances.sh
+            /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmWorkerTemplate" "SwarmWorkerAutoScaling"
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          buckets:
+            - !Sub ${BucketName}
+          roleName:
+            Ref: RootRole
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_bootstrap:
+            - get_worker_cfg
+            - init_docker
+            - join_docker_as_worker
+        get_worker_cfg:
+          files:
+            /tmp/worker-join-token.txt:
+              source: !Sub
+                - >-
+                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}worker-join-token.txt
+                - BucketName: !Ref BucketName
+                  S3Region: !Sub 's3.${AWS::Region}'
+                  KeyPrefix: !Ref KeyPrefix
+              mode: '000755'
+              owner: root
+              group: root
+              command: cat /tmp/worker-join-token.txt
+              authentication: S3AccessCreds
+            /tmp/swarmLeaderIp.txt:
+              source: !Sub
+                - >-
+                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}swarmLeaderIp.txt
+                - BucketName: !Ref BucketName
+                  S3Region: !Sub 's3.${AWS::Region}'
+                  KeyPrefix: !Ref KeyPrefix
+              mode: '000755'
+              owner: root
+              group: root
+              command: cat /tmp/swarmLeaderIp.txt
+              authentication: S3AccessCreds
+        init_docker:
+          commands:
+            'a_init_docker':
+              command: !Sub |
+                 /tmp/userdata-swarm-instances.sh initDocker
+        join_docker_as_worker:
+          commands:
+            'a_join_docker_swarm_as_worker':
+              command: !Sub |
+                docker swarm join --token $(cat /tmp/worker-join-token.txt) $(cat /tmp/swarmLeaderIp.txt)
+
+  DSVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      InstanceTenancy: default
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: eu-central-1a
+      MapPublicIpOnLaunch: 'True'
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: eu-central-1b
+      MapPublicIpOnLaunch: 'True'
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSIGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSNetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSRoutePublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSMasterLeaderInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref RootInstanceProfile
+      DisableApiTermination: 'false'
+      InstanceInitiatedShutdownBehavior: stop
+      ImageId: ami-076431be05aaf8080
+      InstanceType: t2.micro
+      Monitoring: 'false'
+      KeyName: !Ref KeyPairName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          #Download script from S3 and run it
+          aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+          chmod +x /tmp/userdata-swarm-instances.sh
+          /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "DSMasterLeaderInstance" "DSMasterLeaderInstance"
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Sub '${ProjectName}-MasterLeader'
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: 'true'
+        DeleteOnTermination: 'true'
+        Description: Primary network interface
+        DeviceIndex: 0
+        SubnetId: !Ref 'PublicSubnetA'
+        GroupSet: [!Ref 'DSSGnodes']
+    Metadata:
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          buckets:
+            - !Sub ${BucketName}
+          roleName:
+            Ref: RootRole
+      AWS::CloudFormation::Init:
+        configSets:
+          ec2_bootstrap:
+            - init_docker
+            - init_docker_swarm
+        init_docker:
+          commands:
+            'a_init_docker':
+              command: !Sub |
+                 /tmp/userdata-swarm-instances.sh initDocker
+        init_docker_swarm:
+          commands:
+            'a_init_docker_swarm':
+              command: !Sub |
+                curl http://169.254.169.254/latest/meta-data/local-ipv4 > swarmLeaderIp.txt
+                docker swarm init --advertise-addr $(cat swarmLeaderIp.txt)
+                docker swarm join-token manager -q > master-join-token.txt
+                docker swarm join-token worker -q > worker-join-token.txt
+                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/swarmLeaderIp.txt --body swarmLeaderIp.txt
+                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/master-join-token.txt --body master-join-token.txt
+                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/worker-join-token.txt --body worker-join-token.txt
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+
+  SwarmMasterAutoScaling:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+        - eu-central-1a
+        - eu-central-1b
+      LaunchTemplate:
+        LaunchTemplateId:
+          !Ref SwarmMasterTemplate
+        Version:
+          !GetAtt SwarmMasterTemplate.LatestVersionNumber
+      MinSize: '2'
+      MaxSize: '2'
+      TargetGroupARNs:
+        - !Ref DSALBTargetGroup
+      VPCZoneIdentifier:
+        - !Ref 'PublicSubnetA'
+        - !Ref 'PublicSubnetB'
+      MetricsCollection:
+        - Granularity: '1Minute'
+          Metrics:
+            - 'GroupMinSize'
+            - 'GroupMaxSize'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+          PropagateAtLaunch: 'true'
+        - Key: Name
+          Value: !Sub '${ProjectName}-SwarmMasterAutoScaling'
+          PropagateAtLaunch: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Count: 2
+        Timeout: PT15M
+    DependsOn: DSMasterLeaderInstance
+
+  SwarmWorkerAutoScaling:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones:
+        - eu-central-1a
+        - eu-central-1b
+      LaunchTemplate:
+        LaunchTemplateId:
+          !Ref SwarmWorkerTemplate
+        Version:
+          !GetAtt SwarmWorkerTemplate.LatestVersionNumber
+      MinSize: '2'
+      MaxSize: '2'
+      TargetGroupARNs:
+        - !Ref DSALBTargetGroup
+      VPCZoneIdentifier:
+        - !Ref 'PublicSubnetA'
+        - !Ref 'PublicSubnetB'
+      MetricsCollection:
+        - Granularity: '1Minute'
+          Metrics:
+            - 'GroupMinSize'
+            - 'GroupMaxSize'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+          PropagateAtLaunch: 'true'
+        - Key: Name
+          Value: !Sub '${ProjectName}-SwarmWorkerAutoScaling'
+          PropagateAtLaunch: 'true'
+    CreationPolicy:
+      ResourceSignal:
+        Count: 2
+        Timeout: PT15M
+    DependsOn: DSMasterLeaderInstance
+
+  DSALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckPort: "80"
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 2
+      Name: DSALBTargets
+      Port: "80"
+      Protocol: HTTP
+      TargetType: instance
+      Targets:
+        - Id: !Ref 'DSMasterLeaderInstance'
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSALBHTTPlistener:
+     Type: "AWS::ElasticLoadBalancingV2::Listener"
+     Properties:
+       DefaultActions:
+         - Type: "forward"
+           ForwardConfig:
+             TargetGroups:
+               - TargetGroupArn: !Ref 'DSALBTargetGroup'
+       LoadBalancerArn: !Ref DSALB
+       Port: 80
+       Protocol: "HTTP"
+
+  DSALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups: [!Ref 'DSSGALB']
+      Subnets:
+        - !Ref 'PublicSubnetA'
+        - !Ref 'PublicSubnetB'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSSGALB:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Docker Swarm - ALB Security Group
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSSGnodes:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Docker Swarm - Nodes Security Group
+      VpcId: !Ref 'DSVPC'
+      Tags:
+        - Key: Project
+          Value: !Ref 'ProjectName'
+        - Key: Name
+          Value: !Ref 'ProjectName'
+
+  DSNACLEntry1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: 'true'
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId: !Ref 'DSNetworkACL'
+
+  DSNACLEntry2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: '-1'
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId: !Ref 'DSNetworkACL'
+
+  subnetacl1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref 'DSNetworkACL'
+      SubnetId: !Ref 'PublicSubnetA'
+
+  subnetacl2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId: !Ref 'DSNetworkACL'
+      SubnetId: !Ref 'PublicSubnetB'
+
+  DSIGWAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'DSVPC'
+      InternetGatewayId: !Ref 'DSIGW'
+
+  subnetRoutePublicA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'DSRoutePublic'
+      SubnetId: !Ref 'PublicSubnetA'
+
+  subnetRoutePublicB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'DSRoutePublic'
+      SubnetId: !Ref 'PublicSubnetB'
+
+  publicroute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref 'DSRoutePublic'
+      GatewayId: !Ref 'DSIGW'
+    DependsOn: DSIGW
+
+  DSSGnodes1Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'Allows Ingress HTTP 80 communication from DSSGALB'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: tcp
+      ToPort: 80
+      FromPort: 80
+      SourceSecurityGroupId: !Ref DSSGALB
+
+  DSSGnodes2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'Allows Ingress SSH 22 communication from Internet IPv4'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: tcp
+      ToPort: 22
+      FromPort: 22
+      CidrIp: 0.0.0.0/0
+
+  DSSGnodes3Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'TCP port 2377 for cluster management communications'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: tcp
+      ToPort: 2377
+      FromPort: 2377
+      SourceSecurityGroupId: !Ref DSSGnodes
+
+  DSSGnodes4Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'TCP port 7946 for communication among nodes'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: tcp
+      ToPort: 7946
+      FromPort: 7946
+      SourceSecurityGroupId: !Ref DSSGnodes
+
+  DSSGnodes5Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'UDP port 7946 for communication among nodes'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: udp
+      ToPort: 7946
+      FromPort: 7946
+      SourceSecurityGroupId: !Ref DSSGnodes
+
+  DSSGnodes6Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'UDP port 4789 for overlay network traffic'
+      GroupId: !Ref DSSGnodes
+      IpProtocol: udp
+      ToPort: 4789
+      FromPort: 4789
+      SourceSecurityGroupId: !Ref DSSGnodes
+
+  DSSGALB1Ingress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      Description: 'Allows Ingress HTTP 80 communication from Internet IPv4'
+      GroupId: !Ref DSSGALB
+      IpProtocol: tcp
+      ToPort: 80
+      FromPort: 80
+      CidrIp: 0.0.0.0/0
+
+Outputs:
+  LoadBalancerDNSName:
+    Description: The DNSName of the load balancer
+    Value: !GetAtt DSALB.DNSName
