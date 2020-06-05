@@ -1,9 +1,9 @@
 #!/bin/bash -xe
 #cfn signaling functions
-# Parameter 1: InitMode: initData initialises UserData, initDocker initialises Docker
-# Parameter 2: AWS StackName
-# Parameter 3: AWS region
-# Parameter 4: Current Instance Logical ID
+#Parameter 1: InitMode: initData initialises UserData, initDocker initialises Docker
+#Parameter 2: AWS StackName
+#Parameter 3: AWS region
+#Parameter 4: Current Instance Logical ID
 echo "[INFO] Start UserData with Parameters $1, $2, $3, $4, $5";
 
 #set calling parameters to local parameters
