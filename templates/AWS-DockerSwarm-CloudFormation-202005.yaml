@@ -46,6 +46,11 @@ Parameters:
       S3 key prefix where assets are located should end withforward slash (/).
     Type: String
 
+  ScriptName:
+    Type: String
+    Description: Name of the init script for UserData
+    Default: 'userdata-swarm-instances.sh'
+
 
 Resources:
 
@@ -98,7 +103,7 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash -xe
             #Download script from S3 and run it
-            aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+            aws s3api get-object --bucket ${BucketName} --key ${KeyPrefix}${ScriptName} /tmp/userdata-swarm-instances.sh
             chmod +x /tmp/userdata-swarm-instances.sh
             /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmMasterTemplate" "SwarmMasterAutoScaling"
     Metadata:
@@ -173,7 +178,7 @@ Resources:
           Fn::Base64: !Sub |
             #!/bin/bash -xe
             #Download script from S3 and run it
-            aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+            aws s3api get-object --bucket ${BucketName} --key ${KeyPrefix}${ScriptName} /tmp/userdata-swarm-instances.sh
             chmod +x /tmp/userdata-swarm-instances.sh
             /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmWorkerTemplate" "SwarmWorkerAutoScaling"
     Metadata:
@@ -309,7 +314,7 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           #Download script from S3 and run it
-          aws s3api get-object --bucket waltersdockerswarm --key swarm-join-tokens/userdata-swarm-instances.sh /tmp/userdata-swarm-instances.sh
+          aws s3api get-object --bucket ${BucketName} --key ${KeyPrefix}${ScriptName} /tmp/userdata-swarm-instances.sh
           chmod +x /tmp/userdata-swarm-instances.sh
           /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "DSMasterLeaderInstance" "DSMasterLeaderInstance"
       Tags:
@@ -350,9 +355,9 @@ Resources:
                 docker swarm init --advertise-addr $(cat swarmLeaderIp.txt)
                 docker swarm join-token manager -q > master-join-token.txt
                 docker swarm join-token worker -q > worker-join-token.txt
-                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/swarmLeaderIp.txt --body swarmLeaderIp.txt
-                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/master-join-token.txt --body master-join-token.txt
-                aws s3api put-object --bucket waltersdockerswarm --key swarm-join-tokens/worker-join-token.txt --body worker-join-token.txt
+                aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}swarmLeaderIp.txt --body swarmLeaderIp.txt
+                aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}master-join-token.txt --body master-join-token.txt
+                aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}worker-join-token.txt --body worker-join-token.txt
     CreationPolicy:
       ResourceSignal:
         Count: 1

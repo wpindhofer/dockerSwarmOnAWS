@@ -1,13 +1,14 @@
 #!/bin/bash -xe
 #Create Docker Swarm Stack including the necessary S3 bucket to share information re swarm tokens
 # Shell script execution example:
-# createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm
+# ./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh
 #Parameter 1: bucketName
 #Parameter 2: bucketKey
 #Parameter 3: awsRegion
 #Parameter 4: stackName
 #Parameter 5: keyPairName
-echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5";
+#Parameter 6: scriptPath
+echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5, $6";
 
 #Set calling parameters to local parameters
 bucketName=$1
@@ -15,11 +16,12 @@ bucketKey=$2
 awsRegion=$3
 stackName=$4
 keyPairName=$5
+scriptPath=$6
 fileName="userdata-swarm-instances.sh"
 fullFileKey="$bucketKey/$fileName"
 
 #Call createS3Bucket Shell script
-scripts/createS3Bucket.sh $bucketName $bucketKey $awsRegion
+./scripts/createS3Bucket.sh $bucketName $bucketKey $fileName $awsRegion $scriptPath
 
 bucketKeySlash="$bucketKey/"
 
@@ -30,7 +32,9 @@ then
    --template-body file://templates/AWS-DockerSwarm-CloudFormation-202005.yaml \
    --parameters ParameterKey=BucketName,ParameterValue=$bucketName \
    ParameterKey=KeyPrefix,ParameterValue=$bucketKeySlash \
-   ParameterKey=KeyPairName,ParameterValue=$keyPairName
+   ParameterKey=KeyPairName,ParameterValue=$keyPairName \
+   ParameterKey=ScriptName,ParameterValue=$fileName \
+   --capabilities CAPABILITY_NAMED_IAM
   if [ $? -eq 0 ]
   then
     echo "Stack created"

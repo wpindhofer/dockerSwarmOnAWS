@@ -2,15 +2,18 @@
 #Create S3 bucket
 #Parameter 1: bucketName
 #Parameter 2: bucketKey
-#Parameter 3: awsRegion
-echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3";
+#Parameter 3: fileKey
+#Parameter 4: awsRegion
+#Parameter 5: fileName
+echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5";
 
 #set calling parameters to local parameters
 bucketName=$1
 bucketKey=$2
-awsRegion=$3
-fileName="userdata-swarm-instances.sh"
-fullFileKey="$bucketKey/$fileName"
+fileKey=$3
+awsRegion=$4
+fileName=$5
+fullFileKey="$bucketKey/$fileKey"
 
 
 #Verify if bucket exists
