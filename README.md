@@ -34,9 +34,11 @@ Also, a detailed description of the starter scripts parameters can be found in t
 Once the cluster has been created, use SSH to connect to one of the master nodes and create a service with the image you want to run in the cluster. Here are example calls
 
 SSH to the instance (Instance DNS can be found in the AWS console):
+
 `ssh -i ./keys/SSH-docker-swarm.pem ec2-user@ec2-3-124-4-108.eu-central-1.compute.amazonaws.com`
 
 Create service for running an NGINX with 4 replicas publishing port 80:
+
 `docker service create --name myNginx --replicas 10 --publish 80:80 nginx`
 
 
