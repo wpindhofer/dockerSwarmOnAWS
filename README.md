@@ -19,6 +19,7 @@ The template consists of 4 parts:
 In order to run the starter script successfully, the following configuration is necessary:
 - Obviously, a linux shell is necessary to run the scripts
 - AWS CLI 2.x is necessary including access to an account with the rights to create policies, buckets and stacks
+- A key pair to access the EC2 instances in the selected region. Here is the description on how to create a key pair in AWS: [AWS Key Pair Documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html#prepare-key-pair)
 
 If you clone the repository and run the script, the following parameters should work well:
 
