@@ -29,6 +29,17 @@ If you clone the repository and run the script, the following parameters should 
 
 Also, a detailed description of the starter scripts parameters can be found in the script.
 
+### Deploy a container in the cluster
+
+Once the cluster has been created, use SSH to connect to one of the master nodes and create a service with the image you want to run in the cluster. Here are example calls
+
+SSH to the instance (Instance DNS can be found in the AWS console):
+`ssh -i ./keys/SSH-docker-swarm.pem ec2-user@ec2-3-124-4-108.eu-central-1.compute.amazonaws.com`
+
+Create service for running an NGINX with 4 replicas publishing port 80:
+`docker service create --name myNginx --replicas 10 --publish 80:80 nginx`
+
+
 ## Next...
 The docker swarm is not production ready. Mostly because security hardening is missing. Also, it is not necessary to assign public IPs to each swarm node - this has been done to simplify the access to the machines. A better solution would be to use a NAT Gateway and a bastion host.
 
