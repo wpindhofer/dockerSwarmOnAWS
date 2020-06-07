@@ -4,6 +4,7 @@
 #Parameter 2: AWS StackName
 #Parameter 3: AWS region
 #Parameter 4: Current Instance Logical ID
+#Parameter 5: Signal target within CloudFormation in order to signal successful run of the scripts
 echo "[INFO] Start UserData with Parameters $1, $2, $3, $4, $5";
 
 #set calling parameters to local parameters

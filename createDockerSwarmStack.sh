@@ -3,22 +3,22 @@
 # Shell script execution example:
 #Parameter 1: bucketName - bucket is used to temporary store data for creating the cluster - bucket can exist or will be created otherwise
 #Parameter 2: bucketKey - bucketkey to store the temporary data
-#Parameter 3: awsRegion - Region to create the cluster
-#Parameter 4: stackName - Name of the CloudFormation stack
-#Parameter 5: keyPairName - Name of the SSH keypair necessary to log into EC2 instances
-#Parameter 6: scriptLocation - Location of the UserData script
-#Parameter 7: stackLocation - Location of the CloudFormation template
-echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5, $6, $7";
+#Parameter 3: stackName - Name of the CloudFormation stack
+#Parameter 4: keyPairName - Name of the SSH keypair necessary to log into EC2 instances
+#Parameter 5: scriptLocation - Location of the UserData script
+#Parameter 6: stackLocation - Location of the CloudFormation template
+echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5, $6";
 
 #Set calling parameters to local parameters
 bucketName=$1
 bucketKey=$2
-awsRegion=$3
-stackName=$4
-keyPairName=$5
-scriptLocation=$6
-stackLocation=$7
+stackName=$3
+keyPairName=$4
+scriptLocation=$5
+stackLocation=$6
 
+#Definition of the awsRegion. There are more hardcoded region references in the template
+awsRegion="eu-central-1"
 #Name of the UserData script uploaded using scriptLocation
 fileKey="userdata-script.sh"
 #Template needs the bucketkey ending with /

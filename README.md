@@ -15,6 +15,8 @@ The template consists of 4 parts:
 - **AWS-DockerSwarm-CloudFormation-2020005.yaml:** The CloudFormation template which creates the Docker Swarm cluster
 - **userdata-swarm-instances.sh:** The script which is used to initialize the EC2 instances - is used in the UserData part of the instance creation within the CloudFormation template
 
+The stack runs in eu-central-1. It is not much effort to make it configurable if necessary.
+
 ## Usage and preconditions
 In order to run the starter script successfully, the following configuration is necessary:
 - Obviously, a linux shell is necessary to run the scripts
@@ -23,7 +25,7 @@ In order to run the starter script successfully, the following configuration is 
 
 If you clone the repository and run the script, the following parameters should work well:
 
-`./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh templates/AWS-DockerSwarm-CloudFormation-202005.yaml`
+`./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh templates/AWS-DockerSwarm-CloudFormation-202005.yaml`
 
 Also, a detailed description of the starter scripts parameters can be found in the script.
 
