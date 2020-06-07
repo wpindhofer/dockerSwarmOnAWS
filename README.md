@@ -10,10 +10,10 @@ The template creates...
 - other necessary parts like ACLs, Policies, SGs.
 
 The template consists of 4 parts:
-- createDockerSwarmStack.sh: Starter script to trigger the template creation
-- createS3Bucket.sh: Create the necessary S3 bucket to store the necessary temporary data like swarm join tokens (triggered by starter script)
-- AWS-DockerSwarm-CloudFormation-2020005.yaml: The CloudFormation template which creates the Docker Swarm cluster
-- userdata-swarm-instances.sh: The script which is used to initialize the EC2 instances - is used in the UserData part of the instance creation within the CloudFormation template
+- **createDockerSwarmStack.sh:** Starter script to trigger the template creation
+- **createS3Bucket.sh:** Create the necessary S3 bucket to store the necessary temporary data like swarm join tokens (triggered by starter script)
+- **AWS-DockerSwarm-CloudFormation-2020005.yaml:** The CloudFormation template which creates the Docker Swarm cluster
+- **userdata-swarm-instances.sh:** The script which is used to initialize the EC2 instances - is used in the UserData part of the instance creation within the CloudFormation template
 
 ## Usage and preconditions
 In order to run the starter script successfully, the following configuration is necessary:
@@ -22,7 +22,7 @@ In order to run the starter script successfully, the following configuration is 
 
 If you clone the repository and run the script, the following parameters should work well:
 
-'./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh templates/AWS-DockerSwarm-CloudFormation-202005.yaml'
+`./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh templates/AWS-DockerSwarm-CloudFormation-202005.yaml`
 
 Also, a detailed description of the starter scripts parameters can be found in the script.
 
