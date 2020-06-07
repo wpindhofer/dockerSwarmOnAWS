@@ -1,14 +1,14 @@
 #!/bin/bash -xe
 #Create Docker Swarm Stack including the necessary S3 bucket to share information re swarm tokens
 # Shell script execution example:
-# ./createDockerSwarmStack.sh waltersdockerswarm swarm-join-tokens eu-central-1 myDockerSwarmStack SSH-docker-swarm scripts/userdata-swarm-instances.sh
-#Parameter 1: bucketName
-#Parameter 2: bucketKey
-#Parameter 3: awsRegion
-#Parameter 4: stackName
-#Parameter 5: keyPairName
-#Parameter 6: scriptPath
-echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5, $6";
+#Parameter 1: bucketName - bucket is used to temporary store data for creating the cluster - bucket can exist or will be created otherwise
+#Parameter 2: bucketKey - bucketkey to store the temporary data
+#Parameter 3: awsRegion - Region to create the cluster
+#Parameter 4: stackName - Name of the CloudFormation stack
+#Parameter 5: keyPairName - Name of the SSH keypair necessary to log into EC2 instances
+#Parameter 6: scriptLocation - Location of the UserData script
+#Parameter 7: stackLocation - Location of the CloudFormation template
+echo "[INFO] Start createS3Bucket with Parameters $1, $2, $3, $4, $5, $6, $7";
 
 #Set calling parameters to local parameters
 bucketName=$1
@@ -16,24 +16,27 @@ bucketKey=$2
 awsRegion=$3
 stackName=$4
 keyPairName=$5
-scriptPath=$6
-fileName="userdata-swarm-instances.sh"
-fullFileKey="$bucketKey/$fileName"
+scriptLocation=$6
+stackLocation=$7
+
+#Name of the UserData script uploaded using scriptLocation
+fileKey="userdata-script.sh"
+#Template needs the bucketkey ending with /
+bucketKeySlash="$bucketKey/"
 
 #Call createS3Bucket Shell script
-./scripts/createS3Bucket.sh $bucketName $bucketKey $fileName $awsRegion $scriptPath
+./scripts/createS3Bucket.sh $bucketName $bucketKey $fileKey $awsRegion $scriptLocation
 
-bucketKeySlash="$bucketKey/"
 
 if [ $? -eq 0 ]
 then
   echo "Continuing with creating stack"
   aws --region $awsRegion cloudformation create-stack --stack-name $stackName \
-   --template-body file://templates/AWS-DockerSwarm-CloudFormation-202005.yaml \
+   --template-body file://$stackLocation \
    --parameters ParameterKey=BucketName,ParameterValue=$bucketName \
    ParameterKey=KeyPrefix,ParameterValue=$bucketKeySlash \
+   ParameterKey=ScriptName,ParameterValue=$fileKey \
    ParameterKey=KeyPairName,ParameterValue=$keyPairName \
-   ParameterKey=ScriptName,ParameterValue=$fileName \
    --capabilities CAPABILITY_NAMED_IAM
   if [ $? -eq 0 ]
   then
