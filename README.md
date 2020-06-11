@@ -39,7 +39,7 @@ SSH to the instance (Instance DNS can be found in the AWS console):
 
 Create service for running an NGINX with 4 replicas publishing port 80:
 
-`docker service create --name myNginx --replicas 10 --publish 80:80 nginx`
+`docker service create --name myNginx --replicas 4 --publish 80:80 nginx`
 
 
 ## Next...
