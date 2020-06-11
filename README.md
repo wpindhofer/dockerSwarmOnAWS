@@ -5,7 +5,7 @@ The template creates...
 - a VPC with 2 public Subnets
 - an ALB to access the Swarm Nodes
 - one EC2 instance running the Docker Swarm Leader node
-- one AutoScalingGroup running 2 Docker Swarm Master nodes
+- one AutoScalingGroup running 2 Docker Swarm Manager nodes
 - one AutoScalingGroup running 2 Docker Swarm Worker nodes
 - other necessary parts like ACLs, Policies, SGs.
 

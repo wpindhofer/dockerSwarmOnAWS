@@ -1,10 +1,10 @@
-AWSTemplateFormatVersion: '2010-09-09'
+managerAWSTemplateFormatVersion: '2010-09-09'
 Description: |
 
   AWS CloudFormation Docker Swarm template
 
   Template creates 5 instances on 2 AZs preconfigured as a Docker Swarm with
-  3 master and 2 worker nodes accessible over an ALB.
+  3 manager and 2 worker nodes accessible over an ALB.
 
   The cluster is ready to be used to deploy web facing services.
 
@@ -83,7 +83,7 @@ Resources:
       Roles:
       - !Ref RootRole
 
-  SwarmMasterTemplate:
+  SwarmManagerTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
@@ -105,7 +105,7 @@ Resources:
             #Download script from S3 and run it
             aws s3api get-object --bucket ${BucketName} --key ${KeyPrefix}${ScriptName} /tmp/userdata-swarm-instances.sh
             chmod +x /tmp/userdata-swarm-instances.sh
-            /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmMasterTemplate" "SwarmMasterAutoScaling"
+            /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "SwarmManagerTemplate" "SwarmManagerAutoScaling"
     Metadata:
       AWS::CloudFormation::Authentication:
         S3AccessCreds:
@@ -117,22 +117,22 @@ Resources:
       AWS::CloudFormation::Init:
         configSets:
           ec2_bootstrap:
-            - get_master_cfg
+            - get_manager_cfg
             - init_docker
-            - join_docker_as_master
-        get_master_cfg:
+            - join_docker_as_manager
+        get_manager_cfg:
           files:
-            /tmp/master-join-token.txt:
+            /tmp/manager-join-token.txt:
               source: !Sub
                 - >-
-                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}master-join-token.txt
+                  https://${BucketName}.${S3Region}.amazonaws.com/${KeyPrefix}manager-join-token.txt
                 - BucketName: !Ref BucketName
                   S3Region: !Sub 's3.${AWS::Region}'
                   KeyPrefix: !Ref KeyPrefix
               mode: '000755'
               owner: root
               group: root
-              command: cat /tmp/master-join-token.txt
+              command: cat /tmp/manager-join-token.txt
               authentication: S3AccessCreds
             /tmp/swarmLeaderIp.txt:
               source: !Sub
@@ -151,11 +151,11 @@ Resources:
             'a_init_docker':
               command: !Sub |
                  /tmp/userdata-swarm-instances.sh initDocker
-        join_docker_as_master:
+        join_docker_as_manager:
           commands:
-            'a_join_docker_swarm_as_master':
+            'a_join_docker_swarm_as_manager':
               command: !Sub |
-                docker swarm join --token $(cat /tmp/master-join-token.txt) $(cat /tmp/swarmLeaderIp.txt)
+                docker swarm join --token $(cat /tmp/manager-join-token.txt) $(cat /tmp/swarmLeaderIp.txt)
 
 
   SwarmWorkerTemplate:
@@ -300,7 +300,7 @@ Resources:
         - Key: Name
           Value: !Ref 'ProjectName'
 
-  DSMasterLeaderInstance:
+  DSManagerLeaderInstance:
     Type: AWS::EC2::Instance
     Properties:
       IamInstanceProfile: !Ref RootInstanceProfile
@@ -316,12 +316,12 @@ Resources:
           #Download script from S3 and run it
           aws s3api get-object --bucket ${BucketName} --key ${KeyPrefix}${ScriptName} /tmp/userdata-swarm-instances.sh
           chmod +x /tmp/userdata-swarm-instances.sh
-          /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "DSMasterLeaderInstance" "DSMasterLeaderInstance"
+          /tmp/userdata-swarm-instances.sh initData ${AWS::StackName} ${AWS::Region} "DSManagerLeaderInstance" "DSManagerLeaderInstance"
       Tags:
         - Key: Project
           Value: !Ref 'ProjectName'
         - Key: Name
-          Value: !Sub '${ProjectName}-MasterLeader'
+          Value: !Sub '${ProjectName}-ManagerLeader'
       NetworkInterfaces:
       - AssociatePublicIpAddress: 'true'
         DeleteOnTermination: 'true'
@@ -353,17 +353,17 @@ Resources:
               command: !Sub |
                 curl http://169.254.169.254/latest/meta-data/local-ipv4 > swarmLeaderIp.txt
                 docker swarm init --advertise-addr $(cat swarmLeaderIp.txt)
-                docker swarm join-token manager -q > master-join-token.txt
+                docker swarm join-token manager -q > manager-join-token.txt
                 docker swarm join-token worker -q > worker-join-token.txt
                 aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}swarmLeaderIp.txt --body swarmLeaderIp.txt
-                aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}master-join-token.txt --body master-join-token.txt
+                aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}manager-join-token.txt --body manager-join-token.txt
                 aws s3api put-object --bucket ${BucketName} --key ${KeyPrefix}worker-join-token.txt --body worker-join-token.txt
     CreationPolicy:
       ResourceSignal:
         Count: 1
         Timeout: PT15M
 
-  SwarmMasterAutoScaling:
+  SwarmManagerAutoScaling:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
       AvailabilityZones:
@@ -371,9 +371,9 @@ Resources:
         - eu-central-1b
       LaunchTemplate:
         LaunchTemplateId:
-          !Ref SwarmMasterTemplate
+          !Ref SwarmManagerTemplate
         Version:
-          !GetAtt SwarmMasterTemplate.LatestVersionNumber
+          !GetAtt SwarmManagerTemplate.LatestVersionNumber
       MinSize: '2'
       MaxSize: '2'
       TargetGroupARNs:
@@ -391,13 +391,13 @@ Resources:
           Value: !Ref 'ProjectName'
           PropagateAtLaunch: 'true'
         - Key: Name
-          Value: !Sub '${ProjectName}-SwarmMasterAutoScaling'
+          Value: !Sub '${ProjectName}-SwarmManagerAutoScaling'
           PropagateAtLaunch: 'true'
     CreationPolicy:
       ResourceSignal:
         Count: 2
         Timeout: PT15M
-    DependsOn: DSMasterLeaderInstance
+    DependsOn: DSManagerLeaderInstance
 
   SwarmWorkerAutoScaling:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -433,7 +433,7 @@ Resources:
       ResourceSignal:
         Count: 2
         Timeout: PT15M
-    DependsOn: DSMasterLeaderInstance
+    DependsOn: DSManagerLeaderInstance
 
   DSALBTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -451,7 +451,7 @@ Resources:
       Protocol: HTTP
       TargetType: instance
       Targets:
-        - Id: !Ref 'DSMasterLeaderInstance'
+        - Id: !Ref 'DSManagerLeaderInstance'
       VpcId: !Ref 'DSVPC'
       Tags:
         - Key: Project
